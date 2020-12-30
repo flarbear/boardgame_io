@@ -1,0 +1,16 @@
+name: boardgame_io
+version: 0.0.1
+description: >-
+  This package includes Dart classes for interacting with
+  the backend of the boardgame.io NodeJs service. You will
+  still need to create your game description and game
+  server in one of the languages supported by boardgame.io
+  but you can create your front-end in Flutter using this
+  package as a bridge.
+repository: http://github.com/flarbear/boardgame_io
+
+environment:
+  sdk: '>=2.12.0-0 <3.0.0'
+
+dependencies:
+  http: ^0.12.2
