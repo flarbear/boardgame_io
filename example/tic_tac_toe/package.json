@@ -1,0 +1,29 @@
+{
+  "name": "tic-tac-toe",
+  "version": "1.0.0",
+  "description": "boardgame.io Tic-Tac-Toe example with dart front end",
+  "main": "index.js",
+  "scripts": {
+    "serve": "node -r esm src/server.js",
+    "start": "parcel index.html --open"
+  },
+  "browserslist": "> 0.4% and not ie 11",
+  "repository": {
+    "type": "git",
+    "url": "git+ssh://git@github.com/flarbear/boardgame_io.git"
+  },
+  "author": "flarbear@github",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/flarbear/boardgame_io/issues"
+  },
+  "homepage": "https://github.com/flarbear/boardgame_io#readme",
+  "dependencies": {
+    "boardgame.io": "^0.42.2",
+    "esm": "^3.2.25",
+    "koa-static": "^5.0.0"
+  },
+  "devDependencies": {
+    "parcel-bundler": "^1.12.4"
+  }
+}

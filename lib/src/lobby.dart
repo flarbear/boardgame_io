@@ -51,8 +51,8 @@ class LobbyPlayer {
   }
 }
 
-class Match {
-  Match._({
+class MatchData {
+  MatchData._({
     required this.gameName,
     required this.matchID,
     required List<LobbyPlayer> players,
@@ -65,8 +65,8 @@ class Match {
         this.createdAt = createdAt ?? DateTime.fromMillisecondsSinceEpoch(0),
         this.updatedAt = updatedAt ?? DateTime.fromMillisecondsSinceEpoch(0);
 
-  factory Match._fromJson(Map<String, dynamic> jsonData) {
-    return Match._(
+  factory MatchData._fromJson(Map<String, dynamic> jsonData) {
+    return MatchData._(
       gameName:  jsonData['gameName']!,
       matchID:   jsonData['matchID']!,
       unlisted:  jsonData['unlisted'] || false,
@@ -114,25 +114,36 @@ class Lobby {
     HttpClient? httpClient,
   })
       : this.gameFreshness = gameFreshness ?? Duration(days: 1),
-        this.matchFreshness = matchFreshness ?? Duration(seconds: 5),
-        this.httpClient = httpClient ?? HttpClient();
+        this.matchFreshness = matchFreshness ?? Duration(seconds: 5);
 
-  HttpClient? httpClient;
   Uri uri;
 
-  Future<dynamic> _getBody(String relativeUrl) async {
-    HttpClientRequest request = await httpClient!.getUrl(uri.resolve(relativeUrl));
-    HttpClientResponse response = await request.close();
-    return JsonDecoder().convert(await response.transform(utf8.decoder).join());
+  Future<T> _withClient<T>(Future<T> fn(HttpClient)) async {
+    final HttpClient client = HttpClient();
+    try {
+      return await fn(client);
+    } finally {
+      client.close();
+    }
   }
 
-  Future<dynamic> _postBody(String relativeUrl, Map<String, dynamic> body) async {
-    HttpClientRequest request = await httpClient!.postUrl(uri.resolve(relativeUrl));
-    request.headers.contentType = ContentType.json;
-    request.write(JsonEncoder().convert(body));
+  Future<dynamic> _getBody(String relativeUrl) => _withClient((httpClient) async {
+    HttpClientRequest request = await httpClient.getUrl(uri.resolve(relativeUrl));
     HttpClientResponse response = await request.close();
-    return JsonDecoder().convert(await response.transform(utf8.decoder).join());
-  }
+    String reply = await response.transform(utf8.decoder).join();
+    return JsonDecoder().convert(reply);
+  });
+
+  Future<dynamic> _postBody(String relativeUrl, Map<String, dynamic> parameters) => _withClient((httpClient) async {
+    Uri absoluteUri = uri.resolve(relativeUrl);
+    HttpClientRequest request = await httpClient.postUrl(absoluteUri);
+    request.headers.contentType = ContentType.json;
+    String bodyString = JsonEncoder().convert(parameters);
+    request.write(bodyString);
+    HttpClientResponse response = await request.close();
+    String reply = await response.transform(utf8.decoder).join();
+    return JsonDecoder().convert(reply);
+  });
 
   Future<List<String>> _loadGames(List<String>? prev) async {
     return (await _getBody('games') as List<dynamic>).map((name) => name.toString()).toList(growable: false);
@@ -140,44 +151,44 @@ class Lobby {
 
   final Duration? gameFreshness;
   late RefreshableState<List<String>> _gameState = RefreshableState(gameFreshness!, _loadGames);
-  Future<List<String>> games({ bool force = false, }) async => _gameState.get(force: force);
+  Future<List<String>> listGames({ bool force = false, }) async => _gameState.get(force: force);
 
-  Future<List<Match>> _loadMatches(gameName) async {
+  Future<List<MatchData>> _loadMatches(gameName) async {
     Map<String, dynamic> replyBody = await _getBody('games/$gameName') as Map<String, dynamic>;
     return (replyBody['matches'] as List<dynamic>).map((matchData) {
-      return Match._fromJson(matchData as Map<String, dynamic>);
+      return MatchData._fromJson(matchData as Map<String, dynamic>);
     }).toList(growable: false);
   }
 
   final Duration? matchFreshness;
-  Map<String, RefreshableState<List<Match>>> _matchStates = <String, RefreshableState<List<Match>>>{};
-  Future<List<Match>> matches(String gameName, { bool force = false, }) async {
-    RefreshableState<List<Match>>? state = _matchStates[gameName];
+  Map<String, RefreshableState<List<MatchData>>> _matchStates = <String, RefreshableState<List<MatchData>>>{};
+  Future<List<MatchData>> listMatches(String gameName, { bool force = false, }) async {
+    RefreshableState<List<MatchData>>? state = _matchStates[gameName];
     if (state == null) {
-      state = RefreshableState<List<Match>>(matchFreshness!, (prev) => _loadMatches(gameName));
+      state = RefreshableState<List<MatchData>>(matchFreshness!, (prev) => _loadMatches(gameName));
       _matchStates[gameName] = state;
     }
     return state.get(force: force);
   }
 
-  Future<Match?> getMatch(String gameName, String matchID, { bool force = false, }) async {
-    List<Match> matchList = await matches(gameName, force: force);
-    for (Match match in matchList) {
-      if (match.matchID == matchID) {
-        return match;
+  Future<MatchData?> getMatch(String gameName, String matchID, { bool force = false, }) async {
+    List<MatchData> matchList = await listMatches(gameName, force: force);
+    for (MatchData matchData in matchList) {
+      if (matchData.matchID == matchID) {
+        return matchData;
       }
     }
     return null;
   }
 
-  Future<Game> createGame(GameDescription game) async {
+  Future<MatchData> createMatch(GameDescription game) async {
     Map<String, dynamic> replyBody = await _postBody('games/${game.name}/create', {
       'numPlayers': game.numPlayers,
     }) as Map<String, dynamic>;
-    return game.makeGame(replyBody['matchID']);
+    return (await getMatch(game.name, replyBody['matchID'], force: true))!;
   }
 
-  Future<Client> joinGame(Game game, String playerID, String name) async {
+  Future<Client> joinMatch(Game game, String playerID, String name) async {
     Map<String, dynamic> replyBody = await _postBody('games/${game.description.name}/${game.matchID}/join', {
       'playerID': playerID,
       'playerName': name,
@@ -199,8 +210,6 @@ class Lobby {
   }
 
   void close() {
-    httpClient?.close(force: true);
-    httpClient = null;
   }
 }
 
@@ -224,28 +233,28 @@ main(List<String> args) async {
   for (String host in args) {
     print('Processing host: "$host"');
     Lobby lobby = Lobby(Uri.parse(host));
-    List<String> gameNames = await lobby.games();
+    List<String> gameNames = await lobby.listGames();
     print('Server provides games: ${gameNames.join(', ')}');
     for (String gameName in gameNames) {
       if (create) {
         GameDescription gameDesc = GameDescription(gameName, 2);
-        Game game = await lobby.createGame(gameDesc);
-        print('Created: ${game.matchID}');
+        MatchData match = await lobby.createMatch(gameDesc);
+        print('Created: ${match.matchID}');
       }
-      List<Match> matches = await lobby.matches(gameName);
+      List<MatchData> matches = await lobby.listMatches(gameName);
       List<Client> clients = <Client>[];
       if (join) {
-        for (Match match in matches) {
-          for (LobbyPlayer player in match.players) {
+        for (MatchData matchData in matches) {
+          for (LobbyPlayer player in matchData.players) {
             if (!player.isSeated) {
-              print('test joining ${match.matchID}/${player.id} as "TEST JOIN"');
-              clients.add(await lobby.joinGame(match.toGame(), player.id, 'TEST JOIN'));
+              print('test joining ${matchData.matchID}/${player.id} as "TEST JOIN"');
+              clients.add(await lobby.joinMatch(matchData.toGame(), player.id, 'TEST JOIN'));
               break;
             }
           }
         }
         if (clients.isNotEmpty) {
-          matches = await lobby.matches(gameName, force: true);
+          matches = await lobby.listMatches(gameName, force: true);
         }
       }
       // print('$gameName matches: [');
