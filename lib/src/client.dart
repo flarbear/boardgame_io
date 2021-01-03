@@ -38,11 +38,11 @@ class Client<G extends Game> {
       final socket = IO.io(gameServer, IO.OptionBuilder().setTransports(['websocket']).disableAutoConnect().build());
       this._socket = socket;
       socket.onConnect((data) {
-        print('SOCKET.onConnect(${data.toString()})');
+        // print('SOCKET.onConnect(${data.toString()})');
         _sync();
       });
       socket.onDisconnect((data) {
-        print('SOCKET.onDisconnect(${data.toString()})');
+        // print('SOCKET.onDisconnect(${data.toString()})');
       });
       socket.on('update', (data) => _update('update', data[0], data[1]));
       socket.on('sync', (data) => _update('sync', data[0], data[1]['state']));
@@ -79,7 +79,7 @@ class Client<G extends Game> {
   }
 
   void _sync() {
-    print('syncing: '+[ game.matchID, this.playerID, game.description.numPlayers ].toString());
+    // print('syncing: '+[ game.matchID, this.playerID, game.description.numPlayers ].toString());
     _socket!.emit('sync', [game.matchID, this.playerID, game.description.numPlayers ]);
   }
 

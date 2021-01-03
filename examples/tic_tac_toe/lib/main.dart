@@ -21,6 +21,10 @@ bool updatePlayerName() {
   return true;
 }
 
+void returnToLobby() {
+  throw 'refresh';
+}
+
 void quit() {
   throw 'quit';
 }
@@ -35,21 +39,15 @@ void main(List<String> args) async {
   final List<String> games = await lobby.listGames();
   print('The server supports the following games: '+games.join(', '));
   setupStdin();
-  List<Client> clients = <Client>[];
-  try {
-    while (await pickGame(lobby, games)) {}
-  } catch (e, stack) {
-    if (e != 'quit') {
+  while (true) {
+    try {
+      await pickGame(lobby, games);
+    } catch (e, stack) {
+      if (e == 'quit') break;
+      if (e == 'refresh') continue;
       print(e);
       print(stack);
-    }
-  }
-  for (Client client in clients) {
-    try {
-      print('Leaving client: '+client.toString());
-      await client.leaveGame();
-    } catch (e) {
-      print(e);
+      break;
     }
   }
   resetStdin();
@@ -84,9 +82,17 @@ void resetStdin() {
 }
 
 Future<int> nextChar() async {
+  if (_stdinCompleter != null) {
+    throw 'Unexpected nested calls to nextChar()';
+  }
   Completer<int> completer = Completer<int>();
   _stdinCompleter = completer;
-  return completer.future;
+  int input = await completer.future;
+  stdout.writeCharCode(input);
+  stdout.write('\n');
+  if (input < 0 || input == qUpper || input == qLower) quit();
+  if (input == rUpper || input == rLower) returnToLobby();
+  return input;
 }
 
 Future<int> choose(String type, List<dynamic> options, [ bool allowCreate = false ]) async {
@@ -110,15 +116,13 @@ Future<int> choose(String type, List<dynamic> options, [ bool allowCreate = fals
     quit();
   }
   print("Or type 'q' or 'Q' to quit.");
+  print("Or type 'r' or 'R' to return and refresh lobby.");
   while (true) {
-    stdout.write('[qQ');
+    stdout.write('[QqRr');
     if (allowCreate) stdout.write('Cc');
     for (int i = 0; i < options.length && i <= 9; i++) stdout.write(i.toString());
     stdout.write(']> ');
     int input = await nextChar();
-    stdout.writeCharCode(input);
-    stdout.write('\n');
-    if (input < 0 || input == qUpper || input == qLower) quit();
     if (allowCreate && (input == cUpper || input == cLower)) return options.length;
     if (input >= digit0 && input <= digit9 && input - digit0 < options.length) {
       return input - digit0;
@@ -139,7 +143,9 @@ Future<bool> pickGame(Lobby lobby, List<String> gameNames) async {
 }
 
 Future<bool> pickMatch(Lobby lobby, String gameName) async {
-  List<MatchData> matches = await lobby.listMatches(gameName, force: true);
+  List<MatchData> matches = (await lobby.listMatches(gameName, force: true))
+      .where((match) => match.canJoin)
+      .toList();
   int index = await choose('match', matches, true);
   if (index < matches.length) {
     return pickSeat(lobby, matches[index]);
@@ -167,60 +173,68 @@ Future<bool> pickSeat(Lobby lobby, MatchData matchData) async {
   return await joinMatch(lobby, matchData, openSeats[index]);
 }
 
-String xo(List<dynamic> cells, int index) {
-  dynamic cell = cells[index];
-  if (cell == null) return (index+1).toString();
-  if (cell == '0') return 'X';
-  if (cell == '1') return 'O';
+String xop(String playerID) {
+  if (playerID == '0') return 'X';
+  if (playerID == '1') return 'O';
   return '?';
+}
+
+String xoc(List<dynamic> cells, int index) {
+  dynamic cell = cells[index];
+  if (cell is String) return xop(cell);
+  return (index+1).toString();
 }
 
 Future<bool> joinMatch(Lobby lobby, MatchData matchData, String playerID) async {
   Client client = await lobby.joinMatch(matchData.toGame(), playerID, playerName);
   final List<int> validMoves = [];
+  String prompt = '';
   client.subscribe((Map<String, dynamic> G, Map<String, dynamic> ctx) {
     validMoves.clear();
     print('\n');
     dynamic gameOver = ctx['gameover'];
     dynamic winner = gameOver?['winner'];
+    dynamic isDraw = gameOver?['draw'] ?? false;
+    List<dynamic> cells = G['cells'];
+    print(' ${xoc(cells, 0)} | ${xoc(cells, 1)} | ${xoc(cells, 2)}');
+    print('---+---+---');
+    print(' ${xoc(cells, 3)} | ${xoc(cells, 4)} | ${xoc(cells, 5)}');
+    print('---+---+---');
+    print(' ${xoc(cells, 6)} | ${xoc(cells, 7)} | ${xoc(cells, 8)}');
     if (gameOver == null) {
-      List<dynamic> cells = G['cells'];
-      print(' ${xo(cells, 0)} | ${xo(cells, 1)} | ${xo(cells, 2)}');
-      print('---+---+---');
-      print(' ${xo(cells, 3)} | ${xo(cells, 4)} | ${xo(cells, 5)}');
-      print('---+---+---');
-      print(' ${xo(cells, 6)} | ${xo(cells, 7)} | ${xo(cells, 8)}');
       for (int i = 0; i < cells.length; i++) {
-        if (cells[i] == null) validMoves.add(i+1);
+        if (cells[i] == null) validMoves.add(i + 1);
       }
-    } else if (winner != null) {
-      print('Game over: ${xo([winner], 0)} won!');
+      if (ctx['currentPlayer'] == client.playerID) {
+        prompt = '${xop(client.playerID)} - Enter move: [QqRr${gameOver == null ? '' : 'rR'}${validMoves.join('')}]> ';
+      } else {
+        prompt = 'Waiting for ${xop(ctx['currentPlayer'])} to move: [QqRr]> ';
+      }
     } else {
-      print('Game over: $gameOver');
+      if (winner != null) {
+        print('Game over: ${xop(winner)} won!');
+      } else if (isDraw) {
+        print ('Game over: draw');
+      } else {
+        print('Game over: $gameOver');
+      }
+      prompt = 'Return to lobby or Quit? [QqRr]> ';
     }
-    if (gameOver != null || ctx['currentPlayer'] == client.playerID) {
-      stdout.write('Enter move: [qQ${gameOver == null ? '' : 'rR'}${validMoves.join('')}]: ');
-    } else {
-      stdout.write('Wait for the other player to move...');
-    }
+    stdout.write(prompt);
   });
   client.start();
   try {
     while (true) {
-      int move = await nextChar();
-      if (move == qLower || move == qUpper) {
-        return false;
-      }
-      if (move == rLower || move == rUpper) {
-        return true;
-      }
-      if (validMoves.contains(move - digit0)) {
-        client.makeMove('clickCell', [ move - digit0 - 1]);
+      int input = await nextChar();
+      if (validMoves.contains(input - digit0)) {
+        client.makeMove('clickCell', [ input - digit0 - 1]);
+        prompt = '';
         continue;
       }
       stdout.write('bad input: ');
-      stdout.writeCharCode(move);
+      stdout.writeCharCode(input);
       stdout.writeln();
+      stdout.write(prompt);
     }
   } finally {
     client.leaveGame();

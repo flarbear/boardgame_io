@@ -11,6 +11,5 @@ environment:
   sdk: ">=2.12.0-0 <3.0.0"
 
 dependencies:
-  socket_io_client: ^0.9.12
   boardgame_io:
     path: ../..

@@ -11,13 +11,15 @@ application front end half of the game in Dart or Flutter.
 ## Getting Started
 
 A sample boardgame.io game based on the Tic-Tac-Toe tutorial and how to write the
-front end in Dart can be found in the [example](example/) folder.
+front end in Dart can be found in the [examples](examples/) folder.
 
 ## Work in Progress
 
 This package is currently a work in progress and only supports the functionality
 used by the Tic-Tac-Toe example so far. Limitations include:
 
+- No support to derive Dart classes from the Javascript equivalents, such as
+the Game description
 - No access to game events (which are usually not executed on the client side
 anyway)
 - All game moves must be executed on the server (using the `client: false` flag

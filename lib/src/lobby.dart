@@ -60,6 +60,7 @@ class MatchData {
     DateTime? createdAt,
     DateTime? updatedAt,
     this.setupData,
+    this.gameOver,
   })
       : this.players = List.unmodifiable(players),
         this.createdAt = createdAt ?? DateTime.fromMillisecondsSinceEpoch(0),
@@ -76,6 +77,7 @@ class MatchData {
       players:   (jsonData['players']! as List<dynamic>).map((playerInfo) {
         return LobbyPlayer._fromJson(playerInfo as Map<String, dynamic>);
       }).toList(growable: false),
+      gameOver:  jsonData['gameover'],
     );
   }
 
@@ -86,6 +88,9 @@ class MatchData {
   final DateTime createdAt;
   final DateTime updatedAt;
   final Map<String, dynamic>? setupData;
+  final Map<String, dynamic>? gameOver;
+
+  bool get canJoin => (gameOver == null && players.any((player) => !player.isSeated));
 
   Game toGame() {
     return Game(GameDescription(gameName, players.length), matchID);
