@@ -6,10 +6,40 @@
  * https://opensource.org/licenses/MIT.
  */
 
+import 'dart:convert';
+
 import 'package:socket_io_client/socket_io_client.dart' as IO;
 
 import './game.dart';
 import './lobby.dart';
+
+List<String> _toStringList(List<dynamic> rawList) => rawList.map<String>((e) => e.toString()).toList();
+
+class ClientContext {
+  ClientContext._fromJson(Map<String,dynamic> jsonData)
+      : this.numPlayers = jsonData['numPlayers'],
+        this.turn = jsonData['turn'],
+        this.currentPlayer = jsonData['currentPlayer'],
+        this.playerOrder = _toStringList(jsonData['playOrder']),
+        this.playOrderPos = jsonData['playOrderPos'],
+        this.phase = jsonData['phase'],
+        this.gameOver = jsonData['gameover']
+  {
+    // print('ctx: '+JsonEncoder.withIndent('  ').convert(jsonData));
+  }
+
+  final int numPlayers;
+  final int turn;
+  final String currentPlayer;
+  final List<String> playerOrder;
+  final int playOrderPos;
+  final String? phase;
+  final Map<String, dynamic>? gameOver;
+
+  bool get isGameOver => gameOver != null;
+  String? get winnerID => gameOver?['winner'];
+  bool get isDraw => gameOver?['draw'] ?? false;
+}
 
 class Client<G extends Game> {
   Client({
@@ -27,10 +57,10 @@ class Client<G extends Game> {
   final String credentials;
 
   int _stateID = -1;
-  dynamic _matchData;
+  // dynamic _matchData;
 
   IO.Socket? _socket;
-  void Function(Map<String, dynamic> G, Map<String, dynamic> ctx) _subscriber = (_, __) {};
+  void Function(Map<String, dynamic> G, ClientContext ctx) _subscriber = (_, __) {};
 
   void start() {
     if (this._socket == null) {
@@ -48,7 +78,7 @@ class Client<G extends Game> {
       socket.on('sync', (data) => _update('sync', data[0], data[1]['state']));
       socket.on('matchData', (data) {
         // print('SOCKET.on(matchData, ${data.toString()})');
-        this._matchData = data;
+        // this._matchData = data;
       });
       socket.open();
     }
@@ -66,13 +96,13 @@ class Client<G extends Game> {
     }
     _stateID = state['_stateID'];
 
-    _subscriber(state['G'], state['ctx']);
+    _subscriber(state['G'], ClientContext._fromJson(state['ctx']));
   }
 
   void subscribe(
       void update(
           Map<String, dynamic> G,
-          Map<String, dynamic> ctx
+          ClientContext ctx
           ),
       ) {
     _subscriber = update;

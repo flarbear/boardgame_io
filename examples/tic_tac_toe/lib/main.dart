@@ -189,36 +189,33 @@ Future<bool> joinMatch(Lobby lobby, MatchData matchData, String playerID) async 
   Client client = await lobby.joinMatch(matchData.toGame(), playerID, playerName);
   final List<int> validMoves = [];
   String prompt = '';
-  client.subscribe((Map<String, dynamic> G, Map<String, dynamic> ctx) {
+  client.subscribe((Map<String, dynamic> G, ClientContext ctx) {
     validMoves.clear();
     print('\n');
-    dynamic gameOver = ctx['gameover'];
-    dynamic winner = gameOver?['winner'];
-    dynamic isDraw = gameOver?['draw'] ?? false;
     List<dynamic> cells = G['cells'];
     print(' ${xoc(cells, 0)} | ${xoc(cells, 1)} | ${xoc(cells, 2)}');
     print('---+---+---');
     print(' ${xoc(cells, 3)} | ${xoc(cells, 4)} | ${xoc(cells, 5)}');
     print('---+---+---');
     print(' ${xoc(cells, 6)} | ${xoc(cells, 7)} | ${xoc(cells, 8)}');
-    if (gameOver == null) {
+    if (ctx.isGameOver) {
+      if (ctx.isDraw) {
+        print('Game over: draw');
+      } else if (ctx.winnerID != null) {
+        print('Game over: ${xop(ctx.winnerID!)} won!');
+      } else {
+        print('Game over: ${ctx.gameOver}');
+      }
+      prompt = 'Return to lobby or Quit? [QqRr]> ';
+    } else {
       for (int i = 0; i < cells.length; i++) {
         if (cells[i] == null) validMoves.add(i + 1);
       }
-      if (ctx['currentPlayer'] == client.playerID) {
-        prompt = '${xop(client.playerID)} - Enter move: [QqRr${gameOver == null ? '' : 'rR'}${validMoves.join('')}]> ';
+      if (ctx.currentPlayer == client.playerID) {
+        prompt = '${xop(client.playerID)} - Enter move: [QqRr${validMoves.join('')}]> ';
       } else {
-        prompt = 'Waiting for ${xop(ctx['currentPlayer'])} to move: [QqRr]> ';
+        prompt = 'Waiting for ${xop(ctx.currentPlayer)} to move: [QqRr]> ';
       }
-    } else {
-      if (winner != null) {
-        print('Game over: ${xop(winner)} won!');
-      } else if (isDraw) {
-        print ('Game over: draw');
-      } else {
-        print('Game over: $gameOver');
-      }
-      prompt = 'Return to lobby or Quit? [QqRr]> ';
     }
     stdout.write(prompt);
   });
