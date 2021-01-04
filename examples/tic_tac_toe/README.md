@@ -41,5 +41,31 @@ pub get
 Running the front end:
 
 ```sh
-dart lib/main.dart ["Player name"]
+dart lib/main.dart [--help | -?] [--name "Player name"] [--allow-spectators] [--debug]
+```
+
+```sh
+% dart lib/main.dart -h
+-h, --[no-]help                display this usage information
+    --[no-]debug               Set logging level to ALL
+    --[no-]allow-spectators    Include option to join any match as a spectator
+    --name=<String>            Specify the name that this player will use
+```
+
+For tic-tac-toe you want at least 2 terminal windows open and run the following commands:
+
+```sh
+Tty-1% dart lib/main.dart [--name Player1]
+[create a match]
+```
+```sh
+Tty-2% dart lib/main.dart [--name Player2]
+[join the empty seat from the match created in the first terminal]
+```
+
+and optionally, to test out the spectator feature:
+
+```sh
+Tty-3% dart lib/main.dart [--name Spectator] --allow-spectators
+[join the spectator seat in the match created in the first terminal]
 ```

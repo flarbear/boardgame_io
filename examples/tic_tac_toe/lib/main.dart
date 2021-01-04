@@ -35,6 +35,10 @@ bool _allowSpectators = false;
 
 void main(List<String> args) async {
   ArgResults argResults = argParser.parse(args);
+  if (argResults['help'] || argResults['usage']) {
+    print(argParser.usage);
+    return;
+  }
 
   Logger.root.onRecord.listen((record) {
     print('${record.level.name}: ${record.time}: ${record.message}');
@@ -255,7 +259,9 @@ Future<bool> joinMatch(Lobby lobby, MatchData matchData, String? playerID) async
 }
 
 ArgParser argParser = ArgParser()
-  ..addFlag('debug')
-  ..addFlag('allow-spectators')
-  ..addOption('name')
+  ..addFlag('help', abbr: 'h', help: 'display this usage information')
+  ..addFlag('usage', hide: true, help: 'display this usage information')
+  ..addFlag('debug', help: 'Set logging level to ALL')
+  ..addFlag('allow-spectators', help: 'Include option to join any match as a spectator')
+  ..addOption('name', help: 'Specify the name that this player will use', valueHelp: 'String')
 ;

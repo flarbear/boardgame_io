@@ -13,11 +13,15 @@ import 'package:socket_io_client/socket_io_client.dart' as IO;
 
 import './game.dart';
 import './lobby.dart';
+import './player.dart';
 
 final Logger _clientLog = Logger('Client');
 
 List<String> _toStringList(List<dynamic> rawList) => rawList.map<String>((e) => e.toString()).toList();
 
+/// The information provided by a boardgame.io match about the current
+/// game progress, as is usually tracked by the 'ctx' argument in the
+/// boardgame.io documentation and examples.
 class ClientContext {
   ClientContext._fromJson(Map<String,dynamic> jsonData)
       : this.numPlayers = jsonData['numPlayers'],
@@ -28,22 +32,45 @@ class ClientContext {
         this.phase = jsonData['phase'],
         this.gameOver = jsonData['gameover']
   {
-    _clientLog.fine('ctx: '+JsonEncoder.withIndent('  ').convert(jsonData));
+    if (_clientLog.isLoggable(Level.FINE)) {
+      _clientLog.fine('ctx: '+JsonEncoder.withIndent('  ').convert(jsonData));
+    }
   }
 
+  /// The number of players in the game.
   final int numPlayers;
+
+  /// The turn counter for the game.
   final int turn;
+
+  /// The ID of the player whose turn it is.
   final String currentPlayer;
+
+  /// The IDs of the players in order of their turns.
   final List<String> playerOrder;
+
+  /// The position in the playerOrder for the current turn.
   final int playOrderPos;
+
+  /// The name of the current game phase, or `null` for the default phase.
   final String? phase;
+
+  /// Information about the end of the game if it is over.
   final Map<String, dynamic>? gameOver;
 
+  /// True iff the game is over.
   bool get isGameOver => gameOver != null;
+
+  /// The protocol-level ID of the winner if the game is over and there was a winner.
   String? get winnerID => gameOver?['winner'];
+
+  /// True iff the game is over and the result was a draw or stalemate.
   bool get isDraw => gameOver?['draw'] ?? false;
 }
 
+/// The Client class will maintain a connection to a boardgame.io server
+/// to either observe the specified match in a "spectator" role, or to
+/// participate using the indicated [playerID] and [credentials].
 class Client<GAME extends Game> {
   Client({
     required this.lobby,
@@ -53,23 +80,38 @@ class Client<GAME extends Game> {
     Uri? uri,
   }) : this.uri = uri ?? lobby.uri;
 
+  /// The Uri of the boardgame.io server managing this game.
   final Uri uri;
+
+  /// The Lobby used to join this game.
   final Lobby lobby;
+
+  /// The [Game] object describing the game being played.
   final GAME game;
+
+  /// The ID of the player participating in this game, or `null` if this is a
+  /// spectator client.
   final String? playerID;
+
+  /// The credentials that enable the client to participate in the game,
+  /// or `null` if this is a spectator client.
   final String? credentials;
 
-  int _stateID = -1;
-  List<LobbyPlayer> players = <LobbyPlayer>[];
+  /// The list of [Player]s participating in this game.
+  List<Player> players = <Player>[];
 
+  int _stateID = -1;
+
+  /// The name associated with the indicated player ID.
   String playerName(String playerID) {
-    Iterable<LobbyPlayer> matching = players.where((player) => player.id == playerID);
+    Iterable<Player> matching = players.where((player) => player.id == playerID);
     return matching.isNotEmpty ? matching.first.name : 'Unknown';
   }
 
   IO.Socket? _socket;
   void Function(Map<String, dynamic> G, ClientContext ctx) _subscriber = (_, __) {};
 
+  /// Start the game client and connect to the boargame.io server.
   void start() {
     if (this._socket == null) {
       String gameServer = uri.resolve(game.description.name).toString();
@@ -91,7 +133,7 @@ class Client<GAME extends Game> {
           return;
         }
         players = (data[1] as List<dynamic>)
-            .map<LobbyPlayer>((json) => LobbyPlayer.fromJson(json))
+            .map<Player>((json) => Player.fromJson(json))
             .toList();
       });
       socket.open();
@@ -113,6 +155,11 @@ class Client<GAME extends Game> {
     _subscriber(state['G'], ClientContext._fromJson(state['ctx']));
   }
 
+  /// Subscribe to the client for updates on the game state with a callback function.
+  ///
+  /// The game state is provided to the callback in two main structures:
+  /// - [G]: the "board" state of the game, where pieces and cards have been played, etc.
+  /// - [ctx]: the "progress" state of the game, which phase the game is in and whose turn, etc.
   void subscribe(
       void update(
           Map<String, dynamic> G,
@@ -127,11 +174,22 @@ class Client<GAME extends Game> {
     _socket!.emit('sync', [game.matchID, this.playerID, game.description.numPlayers ]);
   }
 
+  /// Stop the client and close the client network connection to the boardgame.io
+  /// server, but do not relinquish the seat.
+  ///
+  /// No other [Client] will be able to connect to the same seat in the match without
+  /// the proper [credentials], so this should only be a temporary closure unless the
+  /// player leaves the game using the [Lobby.leaveGame] method.
   void stop() {
     _socket?.close();
     _socket = null;
   }
 
+  /// Send a generic move request to the boardgame.io server.
+  ///
+  /// This is a utility method used by a generic game [Client] to communicate
+  /// moves without any type-checking. More specific moves should be provided
+  /// as methods in subclasses to facilitate strongly typed game play.
   void makeMove(String moveName, List<dynamic> args) {
     _socket!.emit('update', [
       {
@@ -149,6 +207,8 @@ class Client<GAME extends Game> {
     ]);
   }
 
+  /// Stop this client and relinquish the seat in this match (if the
+  /// [Client] joined as a player rather than a spectator).
   Future<void> leaveGame() async {
     stop();
     if (playerID != null) {

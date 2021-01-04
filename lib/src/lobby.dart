@@ -11,52 +11,15 @@ import 'dart:io';
 
 import './client.dart';
 import './game.dart';
+import './player.dart';
 import './server_state.dart';
 
-class LobbyPlayer {
-  LobbyPlayer(this.id, { String? name, bool isConnected = false })
-      : this._name = name,
-        this._isConnected = isConnected;
-
-  factory LobbyPlayer.fromJson(Map<String, dynamic> jsonData) {
-    return LobbyPlayer(jsonData['id']!.toString(),
-      name: jsonData['name'],
-      isConnected: jsonData['isConnected'] ?? false,
-    );
-  }
-
-  final String id;
-
-  String? _name;
-  String? get seatedName => _name;
-  String get name => _name ?? 'Player $id';
-
-  bool get isSeated => _name != null;
-
-  bool _isConnected = false;
-  bool get isConnected => _isConnected;
-
-  @override
-  String toString() {
-    return 'LobbyPlayer(id=$id${isSeated ? ', name=${_name}, isConnected=$isConnected' : ''})';
-  }
-
-  @override
-  int get hashCode {
-    return id.hashCode;
-  }
-
-  @override
-  bool operator ==(Object other) {
-    return (other is LobbyPlayer) && id == other.id;
-  }
-}
-
+/// Provides all information tracked about a given Lobby Match.
 class MatchData {
   MatchData._({
     required this.gameName,
     required this.matchID,
-    required List<LobbyPlayer> players,
+    required List<Player> players,
     this.unlisted = false,
     DateTime? createdAt,
     DateTime? updatedAt,
@@ -76,53 +39,91 @@ class MatchData {
       updatedAt: DateTime.fromMillisecondsSinceEpoch(jsonData['updatedAt'] ?? 0),
       setupData: jsonData['setupData'],
       players:   (jsonData['players']! as List<dynamic>).map((playerInfo) {
-        return LobbyPlayer.fromJson(playerInfo as Map<String, dynamic>);
+        return Player.fromJson(playerInfo as Map<String, dynamic>);
       }).toList(growable: false),
       gameOver:  jsonData['gameover'],
     );
   }
 
+  /// The protocol-level name of the game for which this match was constructed.
   final String gameName;
+
+  /// The protocol-level ID used by the lobby to track this specific match.
   final String matchID;
-  final List<LobbyPlayer> players;
+
+  /// The players currently associated with this match.
+  final List<Player> players;
+
+  /// Whether this match is unlisted (typically `true` for matches created
+  /// outside of the lobby).
   final bool unlisted;
+
+  /// The date and time when this match was created.
   final DateTime createdAt;
+
+  /// The date and time of the last update to this match.
   final DateTime updatedAt;
+
+  /// The setupData passed when this match was created.
   final Map<String, dynamic>? setupData;
+
+  /// When not null, the game is over and the map will contain information
+  /// about the results.
+  ///
+  /// Typically a game that was won will contain the playerID of the winner
+  /// in a `winner` field, as in `gameOver['winner'] = winnerID;`
+  /// Typically a game that is a draw will contain a boolean in a `draw`
+  /// field, as in `gameOver['draw'] = true;`
   final Map<String, dynamic>? gameOver;
 
+  /// True iff the game is not over and there is an unseated player slot
+  /// remaining in the [players] list.
   bool get canJoin => (gameOver == null && players.any((player) => !player.isSeated));
 
+  /// Returns a [Game] object representing this match.
   Game toGame() {
     return Game(GameDescription(gameName, players.length), matchID);
   }
 
+  /// Converts this match to a custom [String] that uses the [playerInit],
+  /// [playerJoin] and [playerEnd] strings to concatenate the list of
+  /// players, as in `$playerInit$player1$playerJoin$player2$playerJoin$player3$playerEnd`.
   String toCustomString(String playerInit, String playerJoin, String playerEnd) {
     return 'Match(id: $matchID, created: ${createdAt.toLocal()}, players: [$playerInit${players.join(playerJoin)}$playerEnd])';
   }
 
+  /// Converts this match to a multi-line [String] at the indicated level
+  /// of [outerIndent] spaces with an additional [innerIndent] spaces for
+  /// the continuation lines of the [Player] list.
   String toMultilineString([ int outerIndent = 0, int innerIndent = 2 ]) {
     String outer = ''.padLeft(outerIndent, ' ');
     String inner = outer.padRight(outerIndent + innerIndent, ' ');
     return toCustomString('\n$inner', ',\n$inner', ',\n$outer');
   }
 
+  /// Converts this match to a simple single-line [String] with simple
+  /// commas separating the entries in the list of [Player]s.
   @override
   String toString() {
     return toCustomString('', ', ', '');
   }
 }
 
+/// The Lobby class will connect to a boardgame.io server at the indicated [Uri]
+/// and provide information about the matches being managed by that server.
 class Lobby {
+  /// Construct a Lobby for the boardgame.io server at the indicated [Uri] with
+  /// optionally specified timeouts for how often a network request is used to
+  /// refresh the list of games or the list of matches.
   Lobby(this.uri, {
     Duration? gameFreshness,
     Duration? matchFreshness,
-    HttpClient? httpClient,
   })
       : this.gameFreshness = gameFreshness ?? Duration(days: 1),
         this.matchFreshness = matchFreshness ?? Duration(seconds: 5);
 
-  Uri uri;
+  /// The Uri of the boardgame.io server.
+  final Uri uri;
 
   Future<T> _withClient<T>(Future<T> fn(HttpClient)) async {
     final HttpClient client = HttpClient();
@@ -155,8 +156,12 @@ class Lobby {
     return (await _getBody('games') as List<dynamic>).map((name) => name.toString()).toList(growable: false);
   }
 
+  /// The expiration duration for how often the list of games will be refreshed.
   final Duration? gameFreshness;
   late RefreshableState<List<String>> _gameState = RefreshableState(gameFreshness!, _loadGames);
+
+  /// Return the list of games managed by the boardgame.io server, as of no more
+  /// than [gameFreshness] since the last network request unless [force] is true.
   Future<List<String>> listGames({ bool force = false, }) async => _gameState.get(force: force);
 
   Future<List<MatchData>> _loadMatches(gameName) async {
@@ -166,8 +171,13 @@ class Lobby {
     }).toList(growable: false);
   }
 
+  /// The expiration duration for how often the list of matches for a given game
+  /// will be refreshed.
   final Duration? matchFreshness;
   Map<String, RefreshableState<List<MatchData>>> _matchStates = <String, RefreshableState<List<MatchData>>>{};
+
+  /// Return the list of matches for the specified game, as of no more than
+  /// [matchFreshness] since the last network request unless [force] is true.
   Future<List<MatchData>> listMatches(String gameName, { bool force = false, }) async {
     RefreshableState<List<MatchData>>? state = _matchStates[gameName];
     if (state == null) {
@@ -177,6 +187,9 @@ class Lobby {
     return state.get(force: force);
   }
 
+  /// Return the information associated with the given game name and ID, as of
+  /// no more than [matchFreshness] since the last network request unless [force]
+  /// is true.
   Future<MatchData?> getMatch(String gameName, String matchID, { bool force = false, }) async {
     List<MatchData> matchList = await listMatches(gameName, force: force);
     for (MatchData matchData in matchList) {
@@ -187,6 +200,8 @@ class Lobby {
     return null;
   }
 
+  /// Create a new match according to the information in [game] and return the
+  /// [MatchData] associated with the new match.
   Future<MatchData> createMatch(GameDescription game) async {
     Map<String, dynamic> replyBody = await _postBody('games/${game.name}/create', {
       'numPlayers': game.numPlayers,
@@ -194,6 +209,8 @@ class Lobby {
     return (await getMatch(game.name, replyBody['matchID'], force: true))!;
   }
 
+  /// Create a [Client] to observe the indicated game match without registering
+  /// as a [Player].
   Client watchMatch(Game game) {
     return Client(
       lobby: this,
@@ -201,6 +218,8 @@ class Lobby {
     );
   }
 
+  /// Create a [Client] to participate in the indicated game match registered
+  /// as the indicated [playerID] with the indicated player [name].
   Future<Client> joinMatch(Game game, String playerID, String name) async {
     Map<String, dynamic> replyBody = await _postBody('games/${game.description.name}/${game.matchID}/join', {
       'playerID': playerID,
@@ -214,6 +233,8 @@ class Lobby {
     );
   }
 
+  /// Inform the server that the indicated credentialed player is officially
+  /// leaving the game, leaving the seat open if another player wishes to join.
   Future<void> leaveGame(Client gameClient) async {
     Game game = gameClient.game;
     await _postBody('games/${game.description.name}/${game.matchID}/leave', {
@@ -222,66 +243,8 @@ class Lobby {
     });
   }
 
+  /// Close any ongoing lobby connections to the boardgame.io server.
   void close() {
-  }
-}
-
-bool checkArg(List<String> args, String flag) {
-  bool contains = args.contains(flag);
-  if (contains) {
-    args.remove(flag);
-  }
-  return contains;
-}
-
-/// Test code to list all matches from all games supported by a list of boardgame.io
-/// servers provided by URL as command-line arguments.
-main(List<String> args) async {
-  args = [ ...args ];
-  bool create = checkArg(args, '--create');
-  bool join = checkArg(args, '--join');
-  if (args.length == 0) {
-    print('usage: dart lobby.dart <game-server-url>');
-  }
-  for (String host in args) {
-    print('Processing host: "$host"');
-    Lobby lobby = Lobby(Uri.parse(host));
-    List<String> gameNames = await lobby.listGames();
-    print('Server provides games: ${gameNames.join(', ')}');
-    for (String gameName in gameNames) {
-      if (create) {
-        GameDescription gameDesc = GameDescription(gameName, 2);
-        MatchData match = await lobby.createMatch(gameDesc);
-        print('Created: ${match.matchID}');
-      }
-      List<MatchData> matches = await lobby.listMatches(gameName);
-      List<Client> clients = <Client>[];
-      if (join) {
-        for (MatchData matchData in matches) {
-          for (LobbyPlayer player in matchData.players) {
-            if (!player.isSeated) {
-              print('test joining ${matchData.matchID}/${player.id} as "TEST JOIN"');
-              clients.add(await lobby.joinMatch(matchData.toGame(), player.id, 'TEST JOIN'));
-              break;
-            }
-          }
-        }
-        if (clients.isNotEmpty) {
-          matches = await lobby.listMatches(gameName, force: true);
-        }
-      }
-      // print('$gameName matches: [');
-      // matches.forEach((match) { print('  ${match.toString()},'); });
-      // print(']');
-      print('$gameName matches: [');
-      matches.forEach((match) { print('  ${match.toMultilineString(2, 2)},'); });
-      print(']');
-      for (Client gameClient in clients) {
-        print('leaving: ${gameClient.game.matchID}/${gameClient.playerID}');
-        await gameClient.leaveGame();
-      }
-    }
-    print('closing lobby');
-    lobby.close();
+    // Will be useful if/when the HTTP Client gets reused between requests...
   }
 }
