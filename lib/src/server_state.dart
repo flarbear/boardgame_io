@@ -13,11 +13,11 @@ class RefreshableState<T> {
   final Duration freshness;
 
   DateTime _expiration;
-  T? _lastReceived;
+  T _lastReceived;
 
   bool get _stale => !DateTime.now().isBefore(_expiration);
 
-  Future<T?> check() async {
+  Future<T> check() async {
     return _stale ? null : _lastReceived;
   }
 
@@ -25,7 +25,7 @@ class RefreshableState<T> {
     if (force || _stale) {
       return refresh();
     }
-    return _lastReceived!;
+    return _lastReceived;
   }
 
   Future<T> refresh() async {
@@ -35,5 +35,5 @@ class RefreshableState<T> {
     return newValue;
   }
 
-  Future<T> Function(T? previousValue) _load;
+  Future<T> Function(T previousValue) _load;
 }

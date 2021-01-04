@@ -11,14 +11,14 @@ class Player {
   /// Creates a player with, minimally, the indicated protocol-level [id]
   /// and with optional name and connection status for players that are
   /// already seated at the game.
-  Player(this.id, { String? name, bool isConnected = false })
+  Player(this.id, { String name, bool isConnected = false })
       : this._name = name,
         this._isConnected = isConnected;
 
   /// Creates a [Player] object from the information given in a map
   /// decoded from a JSON encoded boardgame.io network request.
   factory Player.fromJson(Map<String, dynamic> jsonData) {
-    return Player(jsonData['id']!.toString(),
+    return Player(jsonData['id'].toString(),
       name: jsonData['name'],
       isConnected: jsonData['isConnected'] ?? false,
     );
@@ -27,10 +27,10 @@ class Player {
   /// The (required) player ID.
   final String id;
 
-  String? _name;
+  String _name;
 
   /// The (optional) name of the player seated in this position.
-  String? get seatedName => _name;
+  String get seatedName => _name;
 
   /// Returns a name for this seat whether or not there is a player seated.
   ///
