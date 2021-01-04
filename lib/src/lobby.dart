@@ -18,7 +18,7 @@ class LobbyPlayer {
       : this._name = name,
         this._isConnected = isConnected;
 
-  factory LobbyPlayer._fromJson(Map<String, dynamic> jsonData) {
+  factory LobbyPlayer.fromJson(Map<String, dynamic> jsonData) {
     return LobbyPlayer(jsonData['id']!.toString(),
       name: jsonData['name'],
       isConnected: jsonData['isConnected'] ?? false,
@@ -28,16 +28,17 @@ class LobbyPlayer {
   final String id;
 
   String? _name;
-  String? get name => _name;
+  String? get seatedName => _name;
+  String get name => _name ?? 'Player $id';
 
-  bool get isSeated => name != null;
+  bool get isSeated => _name != null;
 
   bool _isConnected = false;
   bool get isConnected => _isConnected;
 
   @override
   String toString() {
-    return 'LobbyPlayer(id=$id, name=${name ?? '<empty>'}, isConnected=$isConnected)';
+    return 'LobbyPlayer(id=$id${isSeated ? ', name=${_name}, isConnected=$isConnected' : ''})';
   }
 
   @override
@@ -75,7 +76,7 @@ class MatchData {
       updatedAt: DateTime.fromMillisecondsSinceEpoch(jsonData['updatedAt'] ?? 0),
       setupData: jsonData['setupData'],
       players:   (jsonData['players']! as List<dynamic>).map((playerInfo) {
-        return LobbyPlayer._fromJson(playerInfo as Map<String, dynamic>);
+        return LobbyPlayer.fromJson(playerInfo as Map<String, dynamic>);
       }).toList(growable: false),
       gameOver:  jsonData['gameover'],
     );
@@ -191,6 +192,13 @@ class Lobby {
       'numPlayers': game.numPlayers,
     }) as Map<String, dynamic>;
     return (await getMatch(game.name, replyBody['matchID'], force: true))!;
+  }
+
+  Client watchMatch(Game game) {
+    return Client(
+      lobby: this,
+      game: game,
+    );
   }
 
   Future<Client> joinMatch(Game game, String playerID, String name) async {

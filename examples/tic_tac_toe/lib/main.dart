@@ -9,7 +9,9 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:args/args.dart';
 import 'package:boardgame_io/boardgame.dart';
+import 'package:logging/logging.dart';
 
 var playerName = 'unknown';
 
@@ -29,12 +31,23 @@ void quit() {
   throw 'quit';
 }
 
+bool _allowSpectators = false;
+
 void main(List<String> args) async {
-  if (args.length == 1) {
-    playerName = args[0];
+  ArgResults argResults = argParser.parse(args);
+
+  Logger.root.onRecord.listen((record) {
+    print('${record.level.name}: ${record.time}: ${record.message}');
+  });
+  if (argResults['debug']) Logger.root.level = Level.ALL;
+  _allowSpectators = argResults['allow-spectators'];
+
+  if (argResults['name'] != null) {
+    playerName = argResults['name'];
   } else {
     if (!updatePlayerName()) return;
   }
+
   Lobby lobby = Lobby(Uri.parse('http://localhost:8000'));
   final List<String> games = await lobby.listGames();
   print('The server supports the following games: '+games.join(', '));
@@ -144,7 +157,7 @@ Future<bool> pickGame(Lobby lobby, List<String> gameNames) async {
 
 Future<bool> pickMatch(Lobby lobby, String gameName) async {
   List<MatchData> matches = (await lobby.listMatches(gameName, force: true))
-      .where((match) => match.canJoin)
+      .where((match) => _allowSpectators || match.canJoin)
       .toList();
   int index = await choose('match', matches, true);
   if (index < matches.length) {
@@ -162,15 +175,15 @@ Future<bool> createMatch(Lobby lobby, String gameName) async {
 
 Future<bool> pickSeat(Lobby lobby, MatchData matchData) async {
   List<String> openSeats = matchData.players
-      .where((player) => player.name == null)
+      .where((player) => !player.isSeated)
       .map((player) => player.id)
       .toList();
-  if (openSeats.isEmpty) {
-    print('There are no open seats in $matchData');
-    return true;
-  }
-  int index = await choose('seat', openSeats.map((id) => 'Seat $id').toList());
-  return await joinMatch(lobby, matchData, openSeats[index]);
+  int index = await choose('seat', [
+    ...openSeats.map((id) => 'Seat $id'),
+    if (_allowSpectators) 'Spectator',
+  ]);
+  String? playerID = index < openSeats.length ? openSeats[index] : null;
+  return await joinMatch(lobby, matchData, playerID);
 }
 
 String xop(String playerID) {
@@ -185,13 +198,16 @@ String xoc(List<dynamic> cells, int index) {
   return (index+1).toString();
 }
 
-Future<bool> joinMatch(Lobby lobby, MatchData matchData, String playerID) async {
-  Client client = await lobby.joinMatch(matchData.toGame(), playerID, playerName);
+Future<bool> joinMatch(Lobby lobby, MatchData matchData, String? playerID) async {
+  Client client = (playerID != null)
+      ? await lobby.joinMatch(matchData.toGame(), playerID, playerName)
+      : lobby.watchMatch(matchData.toGame());
   final List<int> validMoves = [];
   String prompt = '';
   client.subscribe((Map<String, dynamic> G, ClientContext ctx) {
     validMoves.clear();
     print('\n');
+    print("${client.playerName(ctx.currentPlayer)} (${xop(ctx.currentPlayer)})'s move");
     List<dynamic> cells = G['cells'];
     print(' ${xoc(cells, 0)} | ${xoc(cells, 1)} | ${xoc(cells, 2)}');
     print('---+---+---');
@@ -211,8 +227,8 @@ Future<bool> joinMatch(Lobby lobby, MatchData matchData, String playerID) async 
       for (int i = 0; i < cells.length; i++) {
         if (cells[i] == null) validMoves.add(i + 1);
       }
-      if (ctx.currentPlayer == client.playerID) {
-        prompt = '${xop(client.playerID)} - Enter move: [QqRr${validMoves.join('')}]> ';
+      if (client.playerID != null && ctx.currentPlayer == client.playerID) {
+        prompt = '${xop(client.playerID!)} - Enter move: [QqRr${validMoves.join('')}]> ';
       } else {
         prompt = 'Waiting for ${xop(ctx.currentPlayer)} to move: [QqRr]> ';
       }
@@ -237,3 +253,9 @@ Future<bool> joinMatch(Lobby lobby, MatchData matchData, String playerID) async 
     client.leaveGame();
   }
 }
+
+ArgParser argParser = ArgParser()
+  ..addFlag('debug')
+  ..addFlag('allow-spectators')
+  ..addOption('name')
+;
