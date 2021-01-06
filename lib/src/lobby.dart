@@ -6,24 +6,21 @@
  * https://opensource.org/licenses/MIT.
  */
 
-import 'dart:convert';
-
-import 'package:universal_io/io.dart';
-
-import './client.dart';
-import './game.dart';
-import './player.dart';
-import './server_state.dart';
+import 'client.dart';
+import 'game.dart';
+import 'io/io.dart';
+import 'player.dart';
+import 'server_state.dart';
 
 /// Provides all information tracked about a given Lobby Match.
 class MatchData {
   MatchData._({
-    this.gameName,
-    this.matchID,
-    List<Player> players,
+    required this.gameName,
+    required this.matchID,
+    required List<Player> players,
     this.unlisted = false,
-    DateTime createdAt,
-    DateTime updatedAt,
+    DateTime? createdAt,
+    DateTime? updatedAt,
     this.setupData,
     this.gameOver,
   })
@@ -33,13 +30,13 @@ class MatchData {
 
   factory MatchData._fromJson(Map<String, dynamic> jsonData) {
     return MatchData._(
-      gameName:  jsonData['gameName'],
-      matchID:   jsonData['matchID'],
+      gameName:  jsonData['gameName']!,
+      matchID:   jsonData['matchID']!,
       unlisted:  jsonData['unlisted'] || false,
       createdAt: DateTime.fromMillisecondsSinceEpoch(jsonData['createdAt'] ?? 0),
       updatedAt: DateTime.fromMillisecondsSinceEpoch(jsonData['updatedAt'] ?? 0),
       setupData: jsonData['setupData'],
-      players:   (jsonData['players'] as List<dynamic>).map((playerInfo) {
+      players:   (jsonData['players']! as List<dynamic>).map((playerInfo) {
         return Player.fromJson(playerInfo as Map<String, dynamic>);
       }).toList(growable: false),
       gameOver:  jsonData['gameover'],
@@ -66,7 +63,7 @@ class MatchData {
   final DateTime updatedAt;
 
   /// The setupData passed when this match was created.
-  final Map<String, dynamic> setupData;
+  final Map<String, dynamic>? setupData;
 
   /// When not null, the game is over and the map will contain information
   /// about the results.
@@ -75,7 +72,7 @@ class MatchData {
   /// in a `winner` field, as in `gameOver['winner'] = winnerID;`
   /// Typically a game that is a draw will contain a boolean in a `draw`
   /// field, as in `gameOver['draw'] = true;`
-  final Map<String, dynamic> gameOver;
+  final Map<String, dynamic>? gameOver;
 
   /// True iff the game is not over and there is an unseated player slot
   /// remaining in the [players] list.
@@ -117,8 +114,8 @@ class Lobby {
   /// optionally specified timeouts for how often a network request is used to
   /// refresh the list of games or the list of matches.
   Lobby(this.uri, {
-    Duration gameFreshness,
-    Duration matchFreshness,
+    Duration? gameFreshness,
+    Duration? matchFreshness,
   })
       : this.gameFreshness = gameFreshness ?? Duration(days: 1),
         this.matchFreshness = matchFreshness ?? Duration(seconds: 5);
@@ -126,45 +123,25 @@ class Lobby {
   /// The Uri of the boardgame.io server.
   final Uri uri;
 
-  Future<T> _withClient<T>(Future<T> fn(HttpClient)) async {
-    final HttpClient client = HttpClient();
-    try {
-      return await fn(client);
-    } finally {
-      client.close();
-    }
+  Future<dynamic> _getBody(String relativeUrl) async {
+    return io.getBody(uri.resolve(relativeUrl));
   }
 
-  Future<dynamic> _getBody(String relativeUrl) => _withClient((httpClient) async {
-    HttpClientRequest request = await httpClient.getUrl(uri.resolve(relativeUrl));
-    HttpClientResponse response = await request.close();
-    String reply = await response.transform(utf8.decoder).join();
-    return JsonDecoder().convert(reply);
-  });
+  Future<dynamic> _postBody(String relativeUrl, Map<String, String> parameters) async {
+    return io.postBody(uri.resolve(relativeUrl), parameters);
+  }
 
-  Future<dynamic> _postBody(String relativeUrl, Map<String, dynamic> parameters) => _withClient((httpClient) async {
-    Uri absoluteUri = uri.resolve(relativeUrl);
-    HttpClientRequest request = await httpClient.postUrl(absoluteUri);
-    request.headers.contentType = ContentType.json;
-    String bodyString = JsonEncoder().convert(parameters);
-    request.write(bodyString);
-    HttpClientResponse response = await request.close();
-    String reply = await response.transform(utf8.decoder).join();
-    return JsonDecoder().convert(reply);
-  });
-
-  Future<List<String>> _loadGames(List<String> prev) async {
+  Future<List<String>> _loadGames(List<String>? prev) async {
     return (await _getBody('games') as List<dynamic>).map((name) => name.toString()).toList(growable: false);
   }
 
   /// The expiration duration for how often the list of games will be refreshed.
   final Duration gameFreshness;
-  RefreshableState<List<String>> _gameState;
+  late RefreshableState<List<String>> _gameState = RefreshableState(gameFreshness, _loadGames);
 
   /// Return the list of games managed by the boardgame.io server, as of no more
   /// than [gameFreshness] since the last network request unless [force] is true.
-  Future<List<String>> listGames({ bool force = false, }) async =>
-      (_gameState ??= RefreshableState(gameFreshness, _loadGames)).get(force: force);
+  Future<List<String>> listGames({ bool force = false, }) async => _gameState.get(force: force);
 
   Future<List<MatchData>> _loadMatches(gameName) async {
     Map<String, dynamic> replyBody = await _getBody('games/$gameName') as Map<String, dynamic>;
@@ -181,7 +158,7 @@ class Lobby {
   /// Return the list of matches for the specified game, as of no more than
   /// [matchFreshness] since the last network request unless [force] is true.
   Future<List<MatchData>> listMatches(String gameName, { bool force = false, }) async {
-    RefreshableState<List<MatchData>> state = _matchStates[gameName];
+    RefreshableState<List<MatchData>>? state = _matchStates[gameName];
     if (state == null) {
       state = RefreshableState<List<MatchData>>(matchFreshness, (prev) => _loadMatches(gameName));
       _matchStates[gameName] = state;
@@ -192,7 +169,7 @@ class Lobby {
   /// Return the information associated with the given game name and ID, as of
   /// no more than [matchFreshness] since the last network request unless [force]
   /// is true.
-  Future<MatchData> getMatch(String gameName, String matchID, { bool force = false, }) async {
+  Future<MatchData?> getMatch(String gameName, String matchID, { bool force = false, }) async {
     List<MatchData> matchList = await listMatches(gameName, force: force);
     for (MatchData matchData in matchList) {
       if (matchData.matchID == matchID) {
@@ -206,9 +183,9 @@ class Lobby {
   /// [MatchData] associated with the new match.
   Future<MatchData> createMatch(GameDescription game) async {
     Map<String, dynamic> replyBody = await _postBody('games/${game.name}/create', {
-      'numPlayers': game.numPlayers,
+      'numPlayers': game.numPlayers.toString(),
     }) as Map<String, dynamic>;
-    return (await getMatch(game.name, replyBody['matchID'], force: true));
+    return (await getMatch(game.name, replyBody['matchID'], force: true))!;
   }
 
   /// Create a [Client] to observe the indicated game match without registering
@@ -238,11 +215,15 @@ class Lobby {
   /// Inform the server that the indicated credentialed player is officially
   /// leaving the game, leaving the seat open if another player wishes to join.
   Future<void> leaveGame(Client gameClient) async {
-    Game game = gameClient.game;
-    await _postBody('games/${game.description.name}/${game.matchID}/leave', {
-      'playerID': gameClient.playerID,
-      'credentials': gameClient.credentials,
-    });
+    String? playerID = gameClient.playerID;
+    String? credentials = gameClient.credentials;
+    if (playerID != null && credentials != null) {
+      Game game = gameClient.game;
+      await _postBody('games/${game.description.name}/${game.matchID}/leave', {
+        'playerID': playerID,
+        'credentials': credentials,
+      });
+    }
   }
 
   /// Close any ongoing lobby connections to the boardgame.io server.

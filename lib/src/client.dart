@@ -11,9 +11,9 @@ import 'dart:convert';
 import 'package:logging/logging.dart';
 import 'package:socket_io_client/socket_io_client.dart' as IO;
 
-import './game.dart';
-import './lobby.dart';
-import './player.dart';
+import 'game.dart';
+import 'lobby.dart';
+import 'player.dart';
 
 final Logger _clientLog = Logger('Client');
 
@@ -53,19 +53,19 @@ class ClientContext {
   final int playOrderPos;
 
   /// The name of the current game phase, or `null` for the default phase.
-  final String phase;
+  final String? phase;
 
   /// Information about the end of the game if it is over.
-  final Map<String, dynamic> gameOver;
+  final Map<String, dynamic>? gameOver;
 
   /// True iff the game is over.
   bool get isGameOver => gameOver != null;
 
   /// The protocol-level ID of the winner if the game is over and there was a winner.
-  String get winnerID => gameOver == null ? null : gameOver['winner'];
+  String? get winnerID => gameOver?['winner'];
 
   /// True iff the game is over and the result was a draw or stalemate.
-  bool get isDraw => gameOver == null ? false : (gameOver['draw'] ?? false);
+  bool get isDraw => gameOver?['draw'] ?? false;
 }
 
 /// The Client class will maintain a connection to a boardgame.io server
@@ -73,11 +73,11 @@ class ClientContext {
 /// participate using the indicated [playerID] and [credentials].
 class Client<GAME extends Game> {
   Client({
-    this.lobby,
-    this.game,
+    required this.lobby,
+    required this.game,
     this.playerID,
     this.credentials,
-    Uri uri,
+    Uri? uri,
   }) : this.uri = uri ?? lobby.uri;
 
   /// The Uri of the boardgame.io server managing this game.
@@ -91,11 +91,11 @@ class Client<GAME extends Game> {
 
   /// The ID of the player participating in this game, or `null` if this is a
   /// spectator client.
-  final String playerID;
+  final String? playerID;
 
   /// The credentials that enable the client to participate in the game,
   /// or `null` if this is a spectator client.
-  final String credentials;
+  final String? credentials;
 
   /// The list of [Player]s participating in this game, indexed by either
   /// their position in the list or by their playerID.
@@ -105,10 +105,10 @@ class Client<GAME extends Game> {
   String get playerName => players[playerID]?.name ?? 'Spectator';
 
   int _stateID = -1;
-  Map<String, dynamic> _G;
-  ClientContext _ctx;
+  Map<String, dynamic>? _G;
+  ClientContext? _ctx;
 
-  IO.Socket _socket;
+  IO.Socket? _socket;
   void Function(Map<String, dynamic> G, ClientContext ctx) _subscriber = (_, __) {};
 
   /// Start the game client and connect to the boardgame.io server.
@@ -164,7 +164,11 @@ class Client<GAME extends Game> {
   }
 
   void _notify() {
-    _subscriber(_G, _ctx);
+    Map<String, dynamic>? G = _G;
+    ClientContext? ctx = _ctx;
+    if (G != null && ctx != null) {
+      _subscriber(G, ctx);
+    }
   }
 
   /// Subscribe to the client for updates on the game state with a callback function.
@@ -183,7 +187,7 @@ class Client<GAME extends Game> {
 
   void _sync() {
     _clientLog.fine('syncing: '+[ game.matchID, this.playerID, game.description.numPlayers ].toString());
-    _socket.emit('sync', [game.matchID, this.playerID, game.description.numPlayers ]);
+    _socket!.emit('sync', [game.matchID, this.playerID, game.description.numPlayers ]);
   }
 
   /// Stop the client and close the client network connection to the boardgame.io
@@ -203,7 +207,7 @@ class Client<GAME extends Game> {
   /// moves without any type-checking. More specific moves should be provided
   /// as methods in subclasses to facilitate strongly typed game play.
   void makeMove(String moveName, List<dynamic> args) {
-    _socket.emit('update', [
+    _socket!.emit('update', [
       {
         'type': 'MAKE_MOVE',
         'payload': {

@@ -7,17 +7,17 @@
  */
 
 import 'dart:async';
+import 'dart:io';
 
 import 'package:args/args.dart';
 import 'package:boardgame_io/boardgame.dart';
 import 'package:logging/logging.dart';
-import 'package:universal_io/io.dart';
 
 var playerName = 'unknown';
 
 bool updatePlayerName() {
   stdout.write('Enter name: ');
-  String newName = stdin.readLineSync();
+  String? newName = stdin.readLineSync();
   if (newName == null) return false;
   playerName = newName;
   return true;
@@ -56,8 +56,7 @@ void main(List<String> args) async {
   final List<String> games = await lobby.listGames();
   print('The server supports the following games: '+games.join(', '));
   setupStdin();
-  bool done = false; // Code past the loop is determined to be "dead" without this variable...?
-  while (!done) {
+  while (true) {
     try {
       await pickGame(lobby, games);
     } catch (e, stack) {
@@ -81,8 +80,8 @@ const int rLower = rUpper + 32;
 const int digit0 = 48;
 const int digit9 = digit0 + 9;
 
-Completer<int> _stdinCompleter;
-StreamSubscription<List<int>> _stdinListener;
+Completer<int>? _stdinCompleter;
+StreamSubscription<List<int>>? _stdinListener;
 
 void setupStdin() {
   stdin.echoMode = false;
@@ -187,7 +186,7 @@ Future<bool> pickSeat(Lobby lobby, MatchData matchData) async {
     ...openSeats.map((id) => 'Seat $id'),
     if (_allowSpectators) 'Spectator',
   ]);
-  String playerID = index < openSeats.length ? openSeats[index] : null;
+  String? playerID = index < openSeats.length ? openSeats[index] : null;
   return await joinMatch(lobby, matchData, playerID);
 }
 
@@ -203,7 +202,7 @@ String xoc(List<dynamic> cells, int index) {
   return (index+1).toString();
 }
 
-Future<bool> joinMatch(Lobby lobby, MatchData matchData, String playerID) async {
+Future<bool> joinMatch(Lobby lobby, MatchData matchData, String? playerID) async {
   Client client = (playerID != null)
       ? await lobby.joinMatch(matchData.toGame(), playerID, playerName)
       : lobby.watchMatch(matchData.toGame());
@@ -211,7 +210,6 @@ Future<bool> joinMatch(Lobby lobby, MatchData matchData, String playerID) async 
   String prompt = '';
   client.subscribe((Map<String, dynamic> G, ClientContext ctx) {
     validMoves.clear();
-    if (ctx == null) return;
     print('\n');
     print("${xop(ctx.currentPlayer)}'s move");
     List<dynamic> cells = G['cells'];
@@ -224,7 +222,7 @@ Future<bool> joinMatch(Lobby lobby, MatchData matchData, String playerID) async 
       if (ctx.isDraw) {
         print('Game over: draw');
       } else if (ctx.winnerID != null) {
-        print('Game over: ${xop(ctx.winnerID)} won!');
+        print('Game over: ${xop(ctx.winnerID!)} won!');
       } else {
         print('Game over: ${ctx.gameOver}');
       }
@@ -234,7 +232,7 @@ Future<bool> joinMatch(Lobby lobby, MatchData matchData, String playerID) async 
         if (cells[i] == null) validMoves.add(i + 1);
       }
       if (client.playerID != null && ctx.currentPlayer == client.playerID) {
-        prompt = '${xop(client.playerID)} - Enter move: [QqRr${validMoves.join('')}]> ';
+        prompt = '${xop(client.playerID!)} - Enter move: [QqRr${validMoves.join('')}]> ';
       } else {
         prompt = 'Waiting for ${xop(ctx.currentPlayer)} to move: [QqRr]> ';
       }
