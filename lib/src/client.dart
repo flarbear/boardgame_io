@@ -206,13 +206,13 @@ class Client<GAME extends Game> {
   /// This is a utility method used by a generic game [Client] to communicate
   /// moves without any type-checking. More specific moves should be provided
   /// as methods in subclasses to facilitate strongly typed game play.
-  void makeMove(String moveName, List<dynamic> args) {
+  void makeMove(String moveName, [ List<dynamic>? args = null, ]) {
     _socket!.emit('update', [
       {
         'type': 'MAKE_MOVE',
         'payload': {
           'type': moveName,
-          'args': args,
+          'args': args ?? [],
           'playerID': this.playerID,
           'credentials': this.credentials,
         },

@@ -17,13 +17,15 @@
 /// This description can be used to create a new match, or it can
 /// be associated with an existing match using the [makeGame] method.
 class GameDescription {
-  GameDescription(this.name, this.numPlayers);
+  GameDescription(this.name, this.numPlayers, { this.setupData });
 
   /// The protocol name for the game instance on the server side.
   final String name;
 
   /// The number of players allowed in the game.
   final int numPlayers;
+
+  final Map<String, dynamic>? setupData;
 
   /// Used to associate this [GameDescription] with a specific
   /// match, resulting in a [Game].

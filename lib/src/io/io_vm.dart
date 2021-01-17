@@ -1,3 +1,11 @@
+/*
+ * Copyright 2021 flarbear@github
+ *
+ * Use of this source code is governed by a MIT-style
+ * license that can be found in the LICENSE file or at
+ * https://opensource.org/licenses/MIT.
+ */
+
 import 'dart:convert';
 import 'dart:io';
 
@@ -18,7 +26,7 @@ class io {
     return JsonDecoder().convert(reply);
   });
 
-  static Future<dynamic> postBody(Uri uri, Map<String, String> parameters) => _withClient((httpClient) async {
+  static Future<dynamic> postBody(Uri uri, Map<String, dynamic> parameters) => _withClient((httpClient) async {
     HttpClientRequest request = await httpClient.postUrl(uri);
     request.headers.contentType = ContentType.json;
     String bodyString = JsonEncoder().convert(parameters);

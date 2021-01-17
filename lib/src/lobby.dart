@@ -127,7 +127,7 @@ class Lobby {
     return io.getBody(uri.resolve(relativeUrl));
   }
 
-  Future<dynamic> _postBody(String relativeUrl, Map<String, String> parameters) async {
+  Future<dynamic> _postBody(String relativeUrl, Map<String, dynamic> parameters) async {
     return io.postBody(uri.resolve(relativeUrl), parameters);
   }
 
@@ -183,7 +183,9 @@ class Lobby {
   /// [MatchData] associated with the new match.
   Future<MatchData> createMatch(GameDescription game) async {
     Map<String, dynamic> replyBody = await _postBody('games/${game.name}/create', {
-      'numPlayers': game.numPlayers.toString(),
+      'numPlayers': game.numPlayers,
+      if (game.setupData != null)
+        'setupData': game.setupData,
     }) as Map<String, dynamic>;
     return (await getMatch(game.name, replyBody['matchID'], force: true))!;
   }
