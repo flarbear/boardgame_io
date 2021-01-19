@@ -179,7 +179,7 @@ class Client<GAME extends Game> {
   void subscribe(
       void update(
           Map<String, dynamic> G,
-          ClientContext ctx
+          ClientContext ctx,
           ),
       ) {
     _subscriber = update;
