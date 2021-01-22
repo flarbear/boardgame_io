@@ -214,8 +214,23 @@ class Lobby {
     );
   }
 
-  /// Inform the server that the indicated credentialed player is officially
-  /// leaving the game, leaving the seat open if another player wishes to join.
+  /// Inform the server that the indicated credentialed player represented by [gameClient]
+  /// has changed their player name to [newName].
+  Future<void> updatePlayer(Client gameClient, String newName) async {
+    String? playerID = gameClient.playerID;
+    String? credentials = gameClient.credentials;
+    if (playerID != null && credentials != null) {
+      Game game = gameClient.game;
+      await _postBody('games/${game.description.name}/${game.matchID}/update', {
+        'playerID': playerID,
+        'credentials': credentials,
+        'newName': newName,
+      });
+    }
+  }
+
+  /// Inform the server that the indicated credentialed player represented by [gameClient]
+  /// is officially leaving the game, leaving the seat open if another player wishes to join.
   Future<void> leaveGame(Client gameClient) async {
     String? playerID = gameClient.playerID;
     String? credentials = gameClient.credentials;

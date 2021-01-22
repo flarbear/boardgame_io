@@ -223,6 +223,12 @@ class Client<GAME extends Game> {
     ]);
   }
 
+  /// Update the name for this player, notifying the other players
+  /// via the lobby.
+  Future<void> updateName(String newName) async {
+    await lobby.updatePlayer(this, newName);
+  }
+
   /// Stop this client and relinquish the seat in this match (if the
   /// [Client] joined as a player rather than a spectator).
   Future<void> leaveGame() async {
