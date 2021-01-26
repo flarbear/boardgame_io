@@ -186,8 +186,8 @@ class Client<GAME extends Game> {
   }
 
   void _sync() {
-    _clientLog.fine('syncing: '+[ game.matchID, this.playerID, game.description.numPlayers ].toString());
-    _socket!.emit('sync', [game.matchID, this.playerID, game.description.numPlayers ]);
+    _clientLog.fine('syncing: '+[ game.matchID, this.playerID, this.credentials ].toString());
+    _socket!.emit('sync', [game.matchID, this.playerID, this.credentials ]);
   }
 
   /// Stop the client and close the client network connection to the boardgame.io

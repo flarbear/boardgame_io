@@ -4,6 +4,7 @@
   "description": "boardgame.io Tic-Tac-Toe example with dart front end",
   "main": "index.js",
   "scripts": {
+    "preinstall": "npx npm-force-resolutions",
     "serve": "node -r esm src/server.js",
     "start": "parcel index.html --open"
   },
@@ -19,11 +20,14 @@
   },
   "homepage": "https://github.com/flarbear/boardgame_io#readme",
   "dependencies": {
-    "boardgame.io": "^0.42.2",
+    "boardgame.io": "^0.43.2",
     "esm": "^3.2.25",
     "koa-static": "^5.0.0"
   },
   "devDependencies": {
     "parcel-bundler": "^1.12.4"
+  },
+  "resolutions": {
+    "node-forge": "0.10.0"
   }
 }
