@@ -1,5 +1,5 @@
 name: boardgame_io
-version: 0.0.2-nullsafety.0
+version: 0.0.3-nullsafety.0
 description: >-
   This package includes Dart classes for interacting with
   the backend of the boardgame.io NodeJs service. You will
