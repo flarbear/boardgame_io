@@ -227,6 +227,11 @@ class Client<GAME extends Game> {
   /// via the lobby.
   Future<void> updateName(String newName) async {
     await lobby.updatePlayer(this, newName);
+    // Names do not propagate to connected clients without a connection status
+    // change.
+    // See: https://github.com/boardgameio/boardgame.io/issues/877
+    stop();
+    start();
   }
 
   /// Stop this client and relinquish the seat in this match (if the
