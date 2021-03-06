@@ -52,7 +52,7 @@ void main(List<String> args) async {
     if (!updatePlayerName()) return;
   }
 
-  Lobby lobby = Lobby(Uri.parse('http://localhost:8000'));
+  Lobby lobby = Lobby(Uri.parse('http://localhost:8000'), playerNamePreferenceKey: null);
   final List<String> games = await lobby.listGames();
   print('The server supports the following games: '+games.join(', '));
   setupStdin();
@@ -204,7 +204,7 @@ String xoc(List<dynamic> cells, int index) {
 
 Future<bool> joinMatch(Lobby lobby, MatchData matchData, String? playerID) async {
   Client client = (playerID != null)
-      ? await lobby.joinMatch(matchData.toGame(), playerID, playerName)
+      ? await lobby.joinMatch(matchData.toGame(), playerID, name: playerName)
       : lobby.watchMatch(matchData.toGame());
   final List<int> validMoves = [];
   String prompt = '';

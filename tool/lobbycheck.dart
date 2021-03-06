@@ -27,7 +27,7 @@ main(List<String> args) async {
   }
   for (String host in args) {
     print('Processing host: "$host"');
-    Lobby lobby = Lobby(Uri.parse(host));
+    Lobby lobby = Lobby(Uri.parse(host), playerNamePreferenceKey: null);
     List<String> gameNames = await lobby.listGames();
     print('Server provides games: ${gameNames.join(', ')}');
     for (String gameName in gameNames) {
@@ -43,7 +43,7 @@ main(List<String> args) async {
           for (Player player in matchData.players) {
             if (!player.isSeated) {
               print('test joining ${matchData.matchID}/${player.id} as "TEST JOIN"');
-              clients.add(await lobby.joinMatch(matchData.toGame(), player.id, 'TEST JOIN'));
+              clients.add(await lobby.joinMatch(matchData.toGame(), player.id, name: 'TEST JOIN'));
               break;
             }
           }

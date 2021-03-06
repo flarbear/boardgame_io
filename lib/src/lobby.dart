@@ -6,6 +6,10 @@
  * https://opensource.org/licenses/MIT.
  */
 
+import 'dart:collection';
+
+import 'package:shared_preferences/shared_preferences.dart';
+
 import 'client.dart';
 import 'game.dart';
 import 'io/io.dart';
@@ -107,6 +111,20 @@ class MatchData {
   }
 }
 
+/// The callback function signature used to listen for name changes in the lobby.
+///
+/// Note that individual games will likely be notified of player name changes via
+/// the standard game update and synchronization mechanisms, but widgets that
+/// display the name of the current player and potentially track the name
+/// across zero, one, or multiple game clients throughout their lifetime
+/// could instead track the name via the [Lobby] instance using this callback.
+typedef void NameCallback(String name);
+
+class _PlayerNameEntry extends LinkedListEntry<_PlayerNameEntry> {
+  _PlayerNameEntry(this.listener);
+  NameCallback listener;
+}
+
 /// The Lobby class will connect to a boardgame.io server at the indicated [Uri]
 /// and provide information about the matches being managed by that server.
 class Lobby {
@@ -114,11 +132,14 @@ class Lobby {
   /// optionally specified timeouts for how often a network request is used to
   /// refresh the list of games or the list of matches.
   Lobby(this.uri, {
+    this.playerNamePreferenceKey,
     Duration? gameFreshness,
     Duration? matchFreshness,
   })
       : this.gameFreshness = gameFreshness ?? Duration(days: 1),
-        this.matchFreshness = matchFreshness ?? Duration(seconds: 5);
+        this.matchFreshness = matchFreshness ?? Duration(seconds: 5) {
+    _nameFromPrefs();
+  }
 
   /// The Uri of the boardgame.io server.
   final Uri uri;
@@ -133,6 +154,85 @@ class Lobby {
 
   Future<List<String>> _loadGames(List<String>? prev) async {
     return (await _getBody('games') as List<dynamic>).map((name) => name.toString()).toList(growable: false);
+  }
+
+  /// The key used to store the player name as a preference that will
+  /// persist across multiple run instances of the lobby or games.
+  final String? playerNamePreferenceKey;
+  final LinkedList<_PlayerNameEntry> _nameListeners = LinkedList();
+
+  /// The last known name of the player who is using this lobby to
+  /// communicate with a game server.
+  ///
+  /// Setting the player name via this property will not update any
+  /// outstanding game clients, so the [Client] should be updated in
+  /// preference to this field if a game is underway.
+  ///
+  /// See [updatePlayer], [joinMatch], and [Client.updatePlayer].
+  String _playerName = 'Unknown Player';
+  String get playerName => _playerName;
+  set playerName(String name) {
+    if (_playerName == name)
+      return;
+    _playerName = name;
+    _nameToPrefs();
+    _notifyPlayerNameListeners(name);
+  }
+
+  void _nameFromPrefs() async {
+    final String? prefKey = playerNamePreferenceKey;
+    if (prefKey != null) {
+      SharedPreferences.getInstance().then((prefs) {
+        String? prefName = prefs.getString(prefKey);
+        if (prefName != null && prefName != _playerName) {
+          _playerName = prefName;
+          _notifyPlayerNameListeners(prefName);
+        }
+      });
+    }
+  }
+
+  void _nameToPrefs() async {
+    final String? prefKey = playerNamePreferenceKey;
+    if (prefKey != null) {
+      SharedPreferences.getInstance().then((prefs) {
+        prefs.setString(prefKey, _playerName);
+      });
+    }
+  }
+
+  /// Add a listener for changes to the [playerName] field.
+  ///
+  /// See [removePlayerNameListener].
+  void addPlayerNameListener(NameCallback listener) {
+    _nameListeners.add(_PlayerNameEntry(listener));
+    listener(_playerName);
+  }
+
+  /// Remove a listener from further notifications of changes
+  /// to the [playerName] field.
+  ///
+  /// Note that removing a listener while an outstanding set of
+  /// notifications are being processed will not prevent a
+  /// callback from that operation.
+  ///
+  /// See [addPlayerNameListener].
+  void removePlayerNameListener(NameCallback listener) {
+    for (final entry in _nameListeners) {
+      if (entry.listener == listener) {
+        entry.unlink();
+        return;
+      }
+    }
+  }
+
+  void _notifyPlayerNameListeners(String name) {
+    final List<_PlayerNameEntry> notifyList = List<_PlayerNameEntry>.from(_nameListeners);
+    for (final entry in notifyList) {
+      if (entry.list != null) {
+        entry.listener(name);
+      }
+    }
   }
 
   /// The expiration duration for how often the list of games will be refreshed.
@@ -200,11 +300,14 @@ class Lobby {
   }
 
   /// Create a [Client] to participate in the indicated game match registered
-  /// as the indicated [playerID] with the indicated player [name].
-  Future<Client> joinMatch(Game game, String playerID, String name) async {
+  /// as the indicated [playerID] with the optional indicated [name] or
+  /// [playerName] if no name is specified.
+  Future<Client> joinMatch(Game game, String playerID, { String? name }) async {
+    if (name != null)
+      playerName = name;
     Map<String, dynamic> replyBody = await _postBody('games/${game.description.name}/${game.matchID}/join', {
       'playerID': playerID,
-      'playerName': name,
+      'playerName': playerName,
     }) as Map<String, dynamic>;
     return Client(
       lobby: this,
@@ -215,8 +318,10 @@ class Lobby {
   }
 
   /// Inform the server that the indicated credentialed player represented by [gameClient]
-  /// has changed their player name to [newName].
+  /// has changed their player name to [newName], updating the [playerName] property and
+  /// notifying any listeners for that property.
   Future<void> updatePlayer(Client gameClient, String newName) async {
+    playerName = newName;
     String? playerID = gameClient.playerID;
     String? credentials = gameClient.credentials;
     if (playerID != null && credentials != null) {

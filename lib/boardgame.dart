@@ -19,3 +19,4 @@ export 'src/client.dart';
 export 'src/game.dart';
 export 'src/lobby.dart';
 export 'src/player.dart';
+export 'src/widgets.dart';
