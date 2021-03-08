@@ -198,7 +198,6 @@ class _LobbyPlayerNameState extends State<LobbyPlayerName> {
 
   @override
   void initState() {
-    print('lobby name widget init');
     super.initState();
     _controller = TextEditingController(text: widget.lobby.playerName);
     widget.lobby.addPlayerNameListener(_updateNameFromLobby);
@@ -206,7 +205,6 @@ class _LobbyPlayerNameState extends State<LobbyPlayerName> {
 
   @override
   void dispose() {
-    print('lobby name widget dispose');
     widget.lobby.removePlayerNameListener(_updateNameFromLobby);
     _controller.dispose();
     super.dispose();
